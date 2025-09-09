@@ -1,0 +1,85 @@
+pipeline:
+  name: video_vtt_source_target_with_source_transients
+
+source_tables:
+  - name: bronze.video_metadata
+  - name: bronze.vtt_transcripts
+    transients:
+      # Parse the VTT transcript once per row
+      - name: transcript_struct
+        op: parse_and_flatten
+        parser: parse_vtt
+        path: transcript[]
+        transient: true
+
+target_tables:
+
+  # -----------------------------
+  # Silver Video Table
+  - table: silver.video_info
+    description: Video metadata including raw transcript
+    default_source: bronze.video_metadata
+    columns:
+      - name: video_id
+        op: copy
+        field: video_id
+      - name: title
+        op: copy
+        field: title
+      - name: description
+        op: copy
+        field: description
+      - name: duration_sec
+        op: copy
+        field: duration_sec
+      - name: published_at
+        op: cast
+        field: published_at
+        params:
+          type: timestamp
+      - name: raw_transcript
+        source: bronze.vtt_transcripts
+        op: copy
+        field: transcript
+    validation:
+      - field: video_id
+        op: not_null
+        action: drop
+    mode: overwrite
+
+  # -----------------------------
+  # Silver Transcript Lines Table
+  - table: silver.transcript_lines
+    description: Exploded transcript lines for each video
+    default_source: bronze.vtt_transcripts
+    columns:
+      - name: video_id
+        source: bronze.video_metadata
+        op: copy
+        field: video_id
+      - name: line_start
+        op: copy
+        field: transcript_struct.start  # use transient column from source
+      - name: line_end
+        op: copy
+        field: transcript_struct.end
+      - name: line_text
+        op: copy
+        field: transcript_struct.text
+      - name: video_title
+        source: bronze.video_metadata
+        op: copy
+        field: title
+    validation:
+      - field: line_text
+        op: not_null
+        action: drop
+      - field: line_start
+        op: gte
+        value: 0
+        action: drop
+      - field: line_end
+        op: gte
+        value: 0
+        action: drop
+    mode: overwrite

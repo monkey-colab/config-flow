@@ -1,0 +1,92 @@
+pipeline:
+  name: stackoverflow_simple_pipeline
+
+source_tables:
+  - name: bronze.stackoverflow_raw
+    transients:
+      # Parse entire JSON
+      - name: raw_struct
+        op: parse_json
+        field: raw_json
+
+      # Parse answers array as transient
+      - name: answers_struct
+        op: parse_json
+        field: raw_json
+        path: answers[]
+        transient: true
+
+      # Parse tags array as transient
+      - name: tags_struct
+        op: parse_json
+        field: raw_json
+        path: tags[]
+        transient: true
+
+      # Top-level question fields (optional struct)
+      - name: question_struct
+        op: parse_json
+        field: raw_json
+        path: "$"
+        transient: true
+
+target_tables:
+
+  # -----------------------------
+  # Silver Questions Table
+  - table: silver.questions
+    description: Flattened questions table with tags
+    default_source: bronze.stackoverflow_raw
+    columns:
+      - name: question_id
+        op: copy
+        field: question_struct.question_id
+      - name: title
+        op: copy
+        field: question_struct.title
+      - name: body
+        op: copy
+        field: question_struct.body
+      - name: tags
+        op: copy
+        field: tags_struct
+      - name: author
+        op: copy
+        field: question_struct.author
+      - name: created_at
+        op: cast
+        field: question_struct.created_at
+        params:
+          type: timestamp
+    validation:
+      - field: question_id
+        op: not_null
+        action: drop
+    mode: overwrite
+
+  # -----------------------------
+  # Silver Answers Table
+  - table: silver.answers
+    description: Flattened answers table
+    default_source: bronze.stackoverflow_raw
+    columns:
+      - name: question_id
+        op: copy
+        field: question_struct.question_id
+      - name: answer_id
+        op: copy
+        field: answers_struct.answer_id
+      - name: answer_author
+        op: copy
+        field: answers_struct.author
+      - name: answer_body
+        op: copy
+        field: answers_struct.body
+      - name: answer_score
+        op: copy
+        field: answers_struct.score
+    validation:
+      - field: answer_id
+        op: not_null
+        action: drop
+    mode: overwrite

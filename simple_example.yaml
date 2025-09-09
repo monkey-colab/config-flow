@@ -1,0 +1,42 @@
+pipeline:
+  name: bronze_to_silver_orders
+  description: Simple 1-to-1 mapping
+
+source:
+  table: bronze.orders
+
+transformations:
+  schema:
+    drop: ["_ingest_time", "_file_path"]
+    rename:
+      ord_id: order_id
+      cust_id: customer_id
+    cast:
+      order_amount: double
+      order_date: timestamp
+
+  columns:
+    - name: order_day
+      op: date          # built-in operation: extract date from timestamp
+      field: order_date
+    - name: is_large_order
+      op: greater_than  # built-in operation
+      field: order_amount
+      value: 1000
+
+validation:
+  checks:
+    - field: order_amount
+      op: gte
+      value: 0
+      action: drop 
+    - field: order_id
+      op: not_null
+      action: quarantine
+
+sink:
+  table: silver.orders
+  mode: overwrite
+  
+  
+  

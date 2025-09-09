@@ -1,0 +1,125 @@
+pipeline:
+  name: stackoverflow_complex_pipeline
+
+source_tables:
+  - name: bronze.stackoverflow_raw
+    transients:
+      # Parse entire JSON row
+      - name: raw_struct
+        op: parse_json
+        field: raw_json
+
+      # Top-level question fields
+      - name: question_struct
+        op: parse_json
+        field: raw_json
+        path: "$"
+        transient: true
+
+      # Question author info
+      - name: question_author_struct
+        op: parse_json
+        field: raw_json
+        path: author
+        transient: true
+
+      # Tags array
+      - name: tags_struct
+        op: parse_json
+        field: raw_json
+        path: tags[]
+        transient: true
+
+      # Answers array
+      - name: answers_struct
+        op: parse_json
+        field: raw_json
+        path: answers[]
+        transient: true
+
+      # Answer authors
+      - name: answers_author_struct
+        op: parse_json
+        field: raw_json
+        path: answers[].author
+        transient: true
+
+      # Answer badges
+      - name: answers_badges_struct
+        op: parse_json
+        field: raw_json
+        path: answers[].author.badges[]
+        transient: true
+
+target_tables:
+
+  # -----------------------------
+  # Silver Questions Table
+  - table: silver.questions
+    description: Flattened questions with tags and author info
+    default_source: bronze.stackoverflow_raw
+    columns:
+      - name: question_id
+        op: copy
+        field: question_struct.question_id
+      - name: title
+        op: copy
+        field: question_struct.title
+      - name: body
+        op: copy
+        field: question_struct.body
+      - name: tags
+        op: copy
+        field: tags_struct
+      - name: author_id
+        op: copy
+        field: question_author_struct.user_id
+      - name: author_name
+        op: copy
+        field: question_author_struct.name
+      - name: author_badges
+        op: copy
+        field: question_author_struct.badges
+      - name: created_at
+        op: cast
+        field: question_struct.created_at
+        params:
+          type: timestamp
+    validation:
+      - field: question_id
+        op: not_null
+        action: drop
+    mode: overwrite
+
+  # -----------------------------
+  # Silver Answers Table
+  - table: silver.answers
+    description: Flattened answers with author info
+    default_source: bronze.stackoverflow_raw
+    columns:
+      - name: question_id
+        op: copy
+        field: question_struct.question_id
+      - name: answer_id
+        op: copy
+        field: answers_struct.answer_id
+      - name: body
+        op: copy
+        field: answers_struct.body
+      - name: score
+        op: copy
+        field: answers_struct.score
+      - name: answer_author_id
+        op: copy
+        field: answers_author_struct.user_id
+      - name: answer_author_name
+        op: copy
+        field: answers_author_struct.name
+      - name: answer_author_badges
+        op: copy
+        field: answers_badges_struct
+    validation:
+      - field: answer_id
+        op: not_null
+        action: drop
+    mode: overwrite

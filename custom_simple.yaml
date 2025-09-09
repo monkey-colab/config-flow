@@ -1,0 +1,30 @@
+pipeline:
+  name: bronze_to_silver_orders
+  description: Example with custom extension
+
+source:
+  table: bronze.orders
+
+transformations:
+  schema:
+    rename:
+      ord_id: order_id
+
+  columns:
+    - name: normalized_amount
+      op: normalize_currency     # custom op
+      field: order_amount
+      params:
+        currency_field: order_currency
+
+  validation:
+    checks:
+      - field: normalized_amount
+        op: custom_rule          # custom validation op
+        params:
+          threshold: 500
+        action: quarantine
+
+sink:
+  table: silver.orders
+  mode: overwrite
